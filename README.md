@@ -25,7 +25,7 @@ Each event produces three files in Nextcloud:
 
 ## Hardware
 
-- Raspberry Pi 4 (tested on Raspberry Pi OS Bookworm)
+- Raspberry Pi 4 
 - Raspberry Pi Camera v1 (OV5647) via CSI connector
 - USB microphone or USB webcam with built-in mic
 - MicroSD card (32GB+ recommended)
