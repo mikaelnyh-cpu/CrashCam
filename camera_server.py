@@ -36,12 +36,12 @@ from requests.auth import HTTPBasicAuth
 
 # ── Config ────────────────────────────────────────────────────
 PORT          = int(os.environ.get("CAM_PORT",   6464))
-CONF_FILE     = Path(os.environ.get("CONF_FILE", "/home/mikael/recorder.conf"))
+CONF_FILE     = Path(os.environ.get("CONF_FILE", "/home/USERNAME/recorder.conf"))
 HTML_FILE     = Path(__file__).parent / "dashboard.html"
 SNAPSHOT_PATH = "/tmp/sc_snapshot.jpg"   # written by sound_recorder.py
 
 # Nextcloud — same env-vars as the recorder
-NC_URL        = os.environ.get("NC_URL",        "https://cloud.nylen.org")
+NC_URL        = os.environ.get("NC_URL",        "")
 NC_USER       = os.environ.get("NC_USER",       "")
 NC_PASS       = os.environ.get("NC_PASS",       "")
 NC_REMOTE_DIR = os.environ.get("NC_REMOTE_DIR", "/CrashCam")
