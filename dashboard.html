@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CrashCam</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --void:      #080a0d;
+  --base:      #0e1117;
+  --raised:    #141820;
+  --overlay:   #1a2030;
+  --line:      #1e2535;
+  --line-hi:   #2a3448;
+  --text-4:    #3a4a60;
+  --text-3:    #566070;
+  --text-2:    #8090a8;
+  --text-1:    #b8c8dc;
+  --text-0:    #e4edf8;
+  --green:     #00e676;
+  --green-dim: #003318;
+  --amber:     #ffab00;
+  --amber-dim: #2a1c00;
+  --red:       #ff3d3d;
+  --red-dim:   #2a0808;
+  --blue:      #4488ff;
+  --blue-dim:  #081830;
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--void); color: var(--text-1);
+             font-family: var(--sans); font-size: 13px; line-height: 1.5;
+             overflow: hidden; }
+
+/* ── Layout ───────────────────────────────────────────────── */
+.shell {
+  display: grid;
+  grid-template-rows: 40px 1fr;
+  grid-template-columns: 1fr 300px;
+  grid-template-areas: "topbar topbar" "main panel";
+  height: 100vh;
+}
+
+/* ── Topbar ───────────────────────────────────────────────── */
+.topbar {
+  grid-area: topbar;
+  display: flex; align-items: center; gap: 0;
+  background: var(--base);
+  border-bottom: 1px solid var(--line);
+  padding: 0;
+  user-select: none;
+}
+.topbar-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 18px;
+  border-right: 1px solid var(--line);
+  height: 100%;
+}
+.brand-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  flex-shrink: 0;
+}
+.brand-dot.triggered {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  animation: blink .6s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+.brand-name {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--text-0); letter-spacing: .14em; text-transform: uppercase;
+}
+
+.tabs {
+  display: flex; align-items: stretch; gap: 0;
+  height: 100%; padding: 0 8px;
+}
+.tab {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 14px;
+  font-family: var(--mono); font-size: 10px; font-weight: 500;
+  color: var(--text-3); letter-spacing: .06em;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  text-transform: uppercase;
+}
+.tab:hover { color: var(--text-1); }
+.tab.active { color: var(--text-0); border-bottom-color: var(--blue); }
+.tab-icon { font-size: 11px; }
+
+.topbar-right {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 18px;
+  font-family: var(--mono); font-size: 10px; color: var(--text-3);
+}
+#clock { color: var(--text-2); }
+
+/* ── Main ─────────────────────────────────────────────────── */
+.main {
+  grid-area: main;
+  display: flex; flex-direction: column;
+  overflow: hidden; background: var(--void);
+}
+.panel {
+  display: none; flex: 1; flex-direction: column; overflow: hidden;
+}
+.panel.active { display: flex; }
+
+/* ── Camera tab ───────────────────────────────────────────── */
+.camera-stage {
+  flex: 1; position: relative; background: #000; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.camera-stage img {
+  display: block; width: 100%; height: 100%; object-fit: contain;
+}
+
+/* Corner HUD labels */
+.hud {
+  position: absolute; inset: 0; pointer-events: none;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; justify-content: space-between;
+}
+.hud-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+}
+.hud-bottom {
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.hud-tag {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: rgba(255,255,255,.7); letter-spacing: .12em;
+  background: rgba(0,0,0,.55); padding: 3px 7px;
+  border: 1px solid rgba(255,255,255,.1); border-radius: 2px;
+  text-transform: uppercase;
+}
+.hud-tag.live { color: var(--green); border-color: rgba(0,230,118,.3); }
+.hud-tag.triggered { color: var(--red); border-color: rgba(255,61,61,.4);
+                     animation: blink .6s step-end infinite; }
+.hud-timestamp { font-family: var(--mono); font-size: 9px; color: rgba(255,255,255,.6); }
+
+/* Sound meter strip */
+.meter-strip {
+  height: 3px; background: var(--line); flex-shrink: 0; position: relative;
+}
+.meter-fill {
+  height: 100%; width: 0%; background: var(--green);
+  transition: width .08s linear, background .08s;
+}
+.meter-fill.warn { background: var(--amber); }
+.meter-fill.over { background: var(--red); }
+.meter-mark {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: rgba(255,255,255,.25);
+}
+
+/* ── Recordings tab ───────────────────────────────────────── */
+.rec-player {
+  flex: 0 0 auto; background: #000; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 180px; max-height: 44vh;
+}
+.rec-player video { max-width: 100%; max-height: 44vh; display: block; outline: none; }
+.rec-empty-player {
+  padding: 32px; text-align: center; color: var(--text-4);
+  font-family: var(--mono); font-size: 11px;
+}
+.rec-empty-player .big { font-size: 28px; margin-bottom: 8px; }
+
+.rec-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised); flex-shrink: 0;
+}
+.rec-toolbar-label {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: var(--text-3); text-transform: uppercase; letter-spacing: .1em;
+}
+.rec-count { color: var(--text-2); font-family: var(--mono); font-size: 9px; }
+.btn-sm {
+  margin-left: auto;
+  background: transparent; border: 1px solid var(--line-hi);
+  border-radius: 3px; padding: 3px 10px;
+  font-family: var(--mono); font-size: 9px; font-weight: 500;
+  color: var(--text-2); cursor: pointer; letter-spacing: .06em;
+  transition: all .15s; text-transform: uppercase;
+}
+.btn-sm:hover { color: var(--text-0); border-color: var(--blue); }
+
+.rec-list {
+  flex: 1; overflow-y: auto; padding: 4px 0;
+}
+.rec-list::-webkit-scrollbar { width: 4px; }
+.rec-list::-webkit-scrollbar-track { background: transparent; }
+.rec-list::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 2px; }
+
+.rec-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 14px;
+  border-left: 2px solid transparent;
+  cursor: default;
+  transition: background .1s;
+}
+.rec-item:hover { background: var(--raised); }
+.rec-item.playing { background: var(--blue-dim); border-left-color: var(--blue); }
+.rec-item-info { flex: 1; min-width: 0; }
+.rec-item-name {
+  font-family: var(--mono); font-size: 10px; color: var(--text-0);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rec-item-meta { font-size: 10px; color: var(--text-3); margin-top: 1px; }
+.rec-item-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.rec-btn {
+  padding: 2px 8px; border-radius: 2px;
+  border: 1px solid var(--line-hi);
+  font-family: var(--mono); font-size: 9px; font-weight: 500;
+  cursor: pointer; background: transparent;
+  transition: all .12s; text-transform: uppercase; letter-spacing: .04em;
+  white-space: nowrap;
+}
+.rec-btn-play { color: var(--blue); border-color: rgba(68,136,255,.4); }
+.rec-btn-play:hover { background: var(--blue-dim); border-color: var(--blue); }
+.rec-btn-dl { color: var(--green); border-color: rgba(0,230,118,.3); }
+.rec-btn-dl:hover { background: var(--green-dim); border-color: var(--green); }
+
+/* ── Log tab ──────────────────────────────────────────────── */
+.log-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--raised); flex-shrink: 0;
+}
+.log-toolbar-label {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: var(--text-3); text-transform: uppercase; letter-spacing: .1em;
+}
+.log-autoscroll {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 9px; color: var(--text-3);
+  cursor: pointer; text-transform: uppercase; letter-spacing: .06em;
+}
+.log-autoscroll input { cursor: pointer; accent-color: var(--blue); }
+.log-linecount { font-family: var(--mono); font-size: 9px; color: var(--text-4); }
+
+.log-body {
+  flex: 1; overflow-y: auto; padding: 6px 0;
+  font-family: var(--mono); font-size: 10.5px; line-height: 1.75;
+}
+.log-body::-webkit-scrollbar { width: 4px; }
+.log-body::-webkit-scrollbar-track { background: transparent; }
+.log-body::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 2px; }
+
+.log-row {
+  display: flex; gap: 10px; padding: 1px 14px;
+  border-left: 2px solid transparent;
+}
+.log-row:hover { background: var(--raised); }
+.log-ts { color: var(--text-4); flex-shrink: 0; }
+.log-msg { color: var(--text-1); word-break: break-all; }
+.log-row.ev-trigger  { border-left-color: var(--red);   }
+.log-row.ev-trigger .log-msg  { color: var(--red); }
+.log-row.ev-encode   { border-left-color: var(--blue);  background: rgba(68,136,255,.04); }
+.log-row.ev-upload   { border-left-color: var(--amber); background: rgba(255,171,0,.03); }
+.log-row.ev-saved    { border-left-color: var(--green); }
+.log-row.ev-saved .log-msg    { color: var(--green); }
+.log-row.ev-error    { border-left-color: var(--red);   background: rgba(255,61,61,.06); }
+.log-row.ev-error .log-msg    { color: var(--red); }
+.log-row.ev-selftest { border-left-color: var(--blue); }
+.log-row.ev-info .log-ts { color: var(--text-4); }
+
+/* ── Settings tab ─────────────────────────────────────────── */
+.settings-gate {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: var(--void);
+}
+.gate-card {
+  width: 320px; padding: 32px;
+  background: var(--raised); border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.gate-title {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--text-3); text-transform: uppercase; letter-spacing: .12em;
+  margin-bottom: 20px;
+}
+.gate-label {
+  font-family: var(--mono); font-size: 10px; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .08em;
+  display: block; margin-bottom: 6px;
+}
+.gate-input {
+  width: 100%; background: var(--void); border: 1px solid var(--line-hi);
+  border-radius: 3px; padding: 8px 10px;
+  color: var(--text-0); font-family: var(--mono); font-size: 13px;
+  outline: none; transition: border-color .15s;
+}
+.gate-input:focus { border-color: var(--blue); }
+.gate-error {
+  margin-top: 8px; font-family: var(--mono); font-size: 10px;
+  color: var(--red); display: none;
+}
+.gate-error.show { display: block; }
+
+.settings-body {
+  flex: 1; overflow-y: auto; padding: 0;
+  display: none; flex-direction: column;
+}
+.settings-body.unlocked { display: flex; }
+.settings-body::-webkit-scrollbar { width: 4px; }
+.settings-body::-webkit-scrollbar-track { background: transparent; }
+.settings-body::-webkit-scrollbar-thumb { background: var(--line-hi); border-radius: 2px; }
+
+.settings-section {
+  padding: 20px; border-bottom: 1px solid var(--line);
+}
+.settings-section:last-child { border-bottom: none; }
+.settings-section-title {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: var(--text-3); text-transform: uppercase; letter-spacing: .12em;
+  margin-bottom: 16px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.field { margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+.field-label {
+  display: block; font-family: var(--mono); font-size: 10px;
+  color: var(--text-3); text-transform: uppercase; letter-spacing: .07em;
+  margin-bottom: 5px;
+}
+.field-input {
+  width: 100%; background: var(--void); border: 1px solid var(--line-hi);
+  border-radius: 3px; padding: 7px 10px;
+  color: var(--text-0); font-family: var(--mono); font-size: 12px;
+  outline: none; transition: border-color .15s;
+}
+.field-input:focus { border-color: var(--blue); }
+.field-hint {
+  margin-top: 4px; font-size: 10px; color: var(--text-4);
+}
+
+.btn-row { display: flex; gap: 8px; margin-top: 16px; }
+.btn {
+  flex: 1; padding: 8px 14px; border-radius: 3px;
+  border: 1px solid transparent; font-family: var(--mono);
+  font-size: 10px; font-weight: 600; cursor: pointer;
+  transition: all .15s; text-transform: uppercase; letter-spacing: .07em;
+}
+.btn-save {
+  background: var(--green-dim); border-color: rgba(0,230,118,.5);
+  color: var(--green);
+}
+.btn-save:hover { background: rgba(0,230,118,.15); }
+.btn-restart {
+  background: var(--amber-dim); border-color: rgba(255,171,0,.4);
+  color: var(--amber);
+}
+.btn-restart:hover { background: rgba(255,171,0,.15); }
+.btn-lock {
+  flex: none; padding: 8px 14px;
+  background: transparent; border-color: var(--line-hi); color: var(--text-3);
+}
+.btn-lock:hover { border-color: var(--red); color: var(--red); }
+
+.toast {
+  margin-top: 12px; padding: 8px 12px; border-radius: 3px;
+  font-family: var(--mono); font-size: 10px; display: none;
+}
+.toast.ok    { background: var(--green-dim); color: var(--green);
+               border: 1px solid rgba(0,230,118,.4); display: block; }
+.toast.err   { background: var(--red-dim);   color: var(--red);
+               border: 1px solid rgba(255,61,61,.4); display: block; }
+
+/* ── Right panel ──────────────────────────────────────────── */
+.right-panel {
+  grid-area: panel;
+  display: flex; flex-direction: column;
+  background: var(--base);
+  border-left: 1px solid var(--line);
+  overflow: hidden;
+}
+.stat-block {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.stat-block-title {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: var(--text-4); text-transform: uppercase; letter-spacing: .12em;
+  margin-bottom: 12px;
+}
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat {
+  background: var(--void); border: 1px solid var(--line);
+  border-radius: 3px; padding: 9px 11px;
+}
+.stat-label {
+  font-family: var(--mono); font-size: 9px; color: var(--text-4);
+  text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px;
+}
+.stat-val {
+  font-family: var(--mono); font-size: 20px; font-weight: 600;
+  color: var(--text-0); line-height: 1;
+}
+.stat-val.green { color: var(--green); }
+.stat-val.red   { color: var(--red); }
+.stat-val.amber { color: var(--amber); }
+
+.rms-block {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.rms-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rms-row:last-child { margin-bottom: 0; }
+.rms-lbl { font-family: var(--mono); font-size: 9px; color: var(--text-3);
+           flex: 0 0 52px; text-transform: uppercase; letter-spacing: .06em; }
+.rms-bar-wrap {
+  flex: 1; height: 6px; background: var(--void);
+  border: 1px solid var(--line); border-radius: 3px;
+  overflow: hidden; position: relative;
+}
+.rms-bar-fill {
+  height: 100%; width: 0%; border-radius: 3px; background: var(--green);
+  transition: width .1s linear, background .1s;
+}
+.rms-bar-mark {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: rgba(255,255,255,.3);
+}
+.rms-num { font-family: var(--mono); font-size: 9px; color: var(--text-1);
+           flex: 0 0 42px; text-align: right; }
+
+.status-block {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  flex: 1;
+}
+.status-label {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: var(--text-4); text-transform: uppercase; letter-spacing: .12em;
+  margin-bottom: 10px;
+}
+.status-row {
+  display: flex; justify-content: space-between;
+  padding: 5px 0; border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 10px;
+}
+.status-row:last-child { border-bottom: none; }
+.status-key { color: var(--text-3); }
+.status-val { color: var(--text-1); }
+.status-val.ok  { color: var(--green); }
+.status-val.bad { color: var(--red); }
+
+/* ── Sysinfo block ────────────────────────────────────────── */
+.sysinfo-block {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.sysinfo-title {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  color: var(--text-4); text-transform: uppercase; letter-spacing: .12em;
+  margin-bottom: 10px;
+}
+.sysinfo-row {
+  margin-bottom: 10px;
+}
+.sysinfo-row:last-child { margin-bottom: 0; }
+.sysinfo-label-row {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 9px;
+  color: var(--text-3); margin-bottom: 3px;
+}
+.sysinfo-label-row span:last-child { color: var(--text-1); }
+.sysinfo-bar-wrap {
+  height: 5px; background: var(--void);
+  border: 1px solid var(--line); border-radius: 3px; overflow: hidden;
+}
+.sysinfo-bar-fill {
+  height: 100%; border-radius: 3px; background: var(--green);
+  transition: width .5s ease, background .3s;
+}
+.sysinfo-bar-fill.warn { background: var(--amber); }
+.sysinfo-bar-fill.crit { background: var(--red); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-dot" id="brandDot"></div>
+      <div class="brand-name">CrashCam</div>
+    </div>
+    <nav class="tabs">
+      <div class="tab active" id="tab-camera"     onclick="showTab('camera')">
+        <span class="tab-icon">◉</span> Camera
+      </div>
+      <div class="tab" id="tab-recordings" onclick="showTab('recordings')">
+        <span class="tab-icon">▣</span> Recordings
+      </div>
+      <div class="tab" id="tab-log"        onclick="showTab('log')">
+        <span class="tab-icon">≡</span> Log
+      </div>
+      <div class="tab" id="tab-settings"   onclick="showTab('settings')">
+        <span class="tab-icon">⚙</span> Settings
+      </div>
+    </nav>
+    <div class="topbar-right">
+      <button id="manualTriggerBtn" onclick="manualTrigger()"
+              style="background:var(--red-dim);border:1px solid rgba(255,61,61,.5);
+                     border-radius:3px;padding:4px 12px;font-family:var(--mono);
+                     font-size:9px;font-weight:600;color:var(--red);cursor:pointer;
+                     text-transform:uppercase;letter-spacing:.07em;transition:all .15s;">
+        ⏺ Manual Trigger
+      </button>
+      <span id="clock">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- Camera -->
+    <div class="panel active" id="panel-camera">
+      <div class="camera-stage">
+        <img id="snapImg" src="/snapshot" alt="Camera">
+        <div class="hud">
+          <div class="hud-top">
+            <span class="hud-tag live">● REC</span>
+            <span class="hud-tag triggered" id="triggerHud" style="display:none">⚠ TRIGGERED</span>
+            <span class="hud-tag" id="snapBadge">SNAPSHOT</span>
+          </div>
+          <div class="hud-bottom">
+            <span class="hud-timestamp" id="snapTs"></span>
+            <span class="hud-tag" id="snapCountdown">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="meter-strip">
+        <div class="meter-fill" id="meterFill"></div>
+        <div class="meter-mark" id="meterMark" style="left:50%"></div>
+      </div>
+    </div>
+
+    <!-- Recordings -->
+    <div class="panel" id="panel-recordings">
+      <div class="rec-player">
+        <div class="rec-empty-player" id="recPlaceholder">
+          <div class="big">▣</div>
+          Select a recording to play
+        </div>
+        <video id="recVideo" controls style="display:none"></video>
+      </div>
+      <div class="rec-toolbar">
+        <span class="rec-toolbar-label">Recordings</span>
+        <span class="rec-count" id="recCount"></span>
+        <button class="btn-sm" onclick="loadRecordings()">↺ Refresh</button>
+      </div>
+      <div class="rec-list" id="recList">
+        <div style="padding:20px;text-align:center;color:var(--text-4);font-family:var(--mono);font-size:10px;">
+          Loading…
+        </div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="panel" id="panel-log">
+      <div class="log-toolbar">
+        <span class="log-toolbar-label">Event Log</span>
+        <label class="log-autoscroll">
+          <input type="checkbox" id="autoScroll" checked> Auto-scroll
+        </label>
+        <span class="log-linecount" id="logCount">0 lines</span>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+
+    <!-- Settings (password gated) -->
+    <div class="panel" id="panel-settings">
+
+      <!-- Lock screen -->
+      <div class="settings-gate" id="settingsGate">
+        <div class="gate-card">
+          <div class="gate-title">⚙ Settings — Authentication required</div>
+          <label class="gate-label">Password</label>
+          <input class="gate-input" type="password" id="gatePassword"
+                 placeholder="Enter password"
+                 onkeydown="if(event.key==='Enter') unlockSettings()">
+          <div class="gate-error" id="gateError">Incorrect password</div>
+          <div class="btn-row" style="margin-top:14px">
+            <button class="btn btn-save" onclick="unlockSettings()">Unlock</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings form (hidden until unlocked) -->
+      <div class="settings-body" id="settingsBody">
+
+        <div class="settings-section">
+          <div class="settings-section-title">Detection</div>
+          <div class="field">
+            <label class="field-label">Trigger threshold (RMS 0.001 – 1.000)</label>
+            <input class="field-input" type="number" id="cfg_threshold"
+                   step="0.001" min="0.001" max="1.000">
+            <div class="field-hint">Lower = more sensitive. Your noise floor is ~0.010. Recommended 0.050 – 0.200.</div>
+          </div>
+          <div class="field">
+            <label class="field-label">Pre-trigger buffer (seconds)</label>
+            <input class="field-input" type="number" id="cfg_pre_trigger_secs"
+                   step="1" min="1" max="300">
+          </div>
+          <div class="field">
+            <label class="field-label">Post-trigger recording (seconds)</label>
+            <input class="field-input" type="number" id="cfg_post_trigger_secs"
+                   step="1" min="5" max="600">
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Video</div>
+          <div class="field">
+            <label class="field-label">Frame rate (FPS)</label>
+            <input class="field-input" type="number" id="cfg_video_fps"
+                   step="1" min="1" max="30">
+          </div>
+          <div class="field">
+            <label class="field-label">Frame width (px)</label>
+            <input class="field-input" type="number" id="cfg_frame_width"
+                   step="1" min="320" max="3840">
+          </div>
+          <div class="field">
+            <label class="field-label">Frame height (px)</label>
+            <input class="field-input" type="number" id="cfg_frame_height"
+                   step="1" min="240" max="2160">
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Actions</div>
+          <div class="btn-row">
+            <button class="btn btn-save" onclick="saveSettings()">Save settings</button>
+            <button class="btn btn-restart" onclick="restartRecorder()">Restart recorder</button>
+            <button class="btn btn-lock" onclick="lockSettings()">Lock</button>
+          </div>
+          <div id="settingsToast" class="toast"></div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Right panel -->
+  <aside class="right-panel">
+
+    <div class="stat-block">
+      <div class="stat-block-title">Session</div>
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="stat-label">Status</div>
+          <div class="stat-val green" id="statStatus">OK</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Triggers</div>
+          <div class="stat-val" id="statTriggers">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Saved</div>
+          <div class="stat-val green" id="statSaved">0</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Errors</div>
+          <div class="stat-val" id="statErrors">0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rms-block">
+      <div class="rms-row">
+        <span class="rms-lbl">Level</span>
+        <div class="rms-bar-wrap">
+          <div class="rms-bar-fill" id="rmsFill"></div>
+          <div class="rms-bar-mark" style="left:50%"></div>
+        </div>
+        <span class="rms-num" id="rmsNum">—</span>
+      </div>
+      <div class="rms-row">
+        <span class="rms-lbl">Threshold</span>
+        <div class="rms-bar-wrap" style="background:transparent;border:none">
+          <div style="height:1px;background:var(--line-hi);margin-top:2px"></div>
+        </div>
+        <span class="rms-num" id="threshNum">—</span>
+      </div>
+    </div>
+
+    <div class="status-block">
+      <div class="status-label">System</div>
+      <div class="status-row">
+        <span class="status-key">Recorder</span>
+        <span class="status-val ok" id="sysRecorder">Running</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Nextcloud</span>
+        <span class="status-val ok" id="sysNextcloud">OK</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Last upload</span>
+        <span class="status-val" id="sysLastUpload">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-key">Last trigger</span>
+        <span class="status-val" id="sysLastTrigger">—</span>
+      </div>
+    </div>
+
+    <div class="sysinfo-block">
+      <div class="sysinfo-title">Hardware</div>
+
+      <div class="sysinfo-row">
+        <div class="sysinfo-label-row">
+          <span>RAM</span>
+          <span id="siMemVals">—</span>
+        </div>
+        <div class="sysinfo-bar-wrap">
+          <div class="sysinfo-bar-fill" id="siMemBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="sysinfo-row">
+        <div class="sysinfo-label-row">
+          <span>Swap</span>
+          <span id="siSwapVals">—</span>
+        </div>
+        <div class="sysinfo-bar-wrap">
+          <div class="sysinfo-bar-fill" id="siSwapBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="sysinfo-row">
+        <div class="sysinfo-label-row">
+          <span>SD Card</span>
+          <span id="siDiskVals">—</span>
+        </div>
+        <div class="sysinfo-bar-wrap">
+          <div class="sysinfo-bar-fill" id="siDiskBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="sysinfo-row">
+        <div class="sysinfo-label-row">
+          <span>CPU Temp</span>
+          <span id="siTemp">—</span>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+</div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────
+const SNAPSHOT_INTERVAL = 10;
+
+// ── State ──────────────────────────────────────────────────
+let triggers = 0, saved = 0, errors = 0, lineCount = 0;
+let threshold = 0.15;
+let isTriggered = false;
+let snapTimer = SNAPSHOT_INTERVAL;
+let currentRec = null;
+let pageLoadTime = Date.now();
+const MAX_LOG = 600;
+
+// ── Clock ──────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById("clock").textContent =
+    new Date().toLocaleTimeString("sv-SE");
+}, 1000);
+
+// ── Tabs ───────────────────────────────────────────────────
+function showTab(name) {
+  ["camera","recordings","log","settings"].forEach(t => {
+    document.getElementById("tab-" + t).classList.toggle("active", t === name);
+    document.getElementById("panel-" + t).classList.toggle("active", t === name);
+  });
+  if (name === "recordings") loadRecordings();
+}
+
+// ── Snapshot ───────────────────────────────────────────────
+function refreshSnapshot() {
+  const img   = document.getElementById("snapImg");
+  const badge = document.getElementById("snapBadge");
+  badge.textContent = "REFRESHING";
+  const url = "/snapshot?" + Date.now();
+  const tmp = new Image();
+  tmp.onload = () => {
+    img.src = url;
+    badge.textContent = "SNAPSHOT";
+    snapTimer = SNAPSHOT_INTERVAL;
+  };
+  tmp.onerror = () => {
+    const age = Date.now() - pageLoadTime;
+    badge.textContent = age < 20000 ? "WARMING UP" : "NO SIGNAL";
+    snapTimer = SNAPSHOT_INTERVAL;
+  };
+  tmp.src = url;
+}
+
+setInterval(() => {
+  snapTimer--;
+  const el = document.getElementById("snapCountdown");
+  el.textContent = `↻ ${snapTimer}s`;
+  if (snapTimer <= 0) refreshSnapshot();
+}, 1000);
+refreshSnapshot();
+
+// ── Recordings ─────────────────────────────────────────────
+function fmtDate(s) {
+  if (!s) return "";
+  try { return new Date(s).toLocaleString("sv-SE"); } catch { return s; }
+}
+
+function loadRecordings() {
+  const list = document.getElementById("recList");
+  list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-4);font-family:var(--mono);font-size:10px;">Loading…</div>';
+  fetch("/videos")
+    .then(r => r.json())
+    .then(vids => {
+      if (!vids.length) {
+        list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-4);font-family:var(--mono);font-size:10px;">No recordings found</div>';
+        document.getElementById("recCount").textContent = "";
+        return;
+      }
+      document.getElementById("recCount").textContent = `${vids.length} clips`;
+      list.innerHTML = "";
+      vids.forEach(v => {
+        const row = document.createElement("div");
+        row.className = "rec-item" + (currentRec === v.name ? " playing" : "");
+        row.dataset.name = v.name;
+        row.innerHTML =
+          `<div class="rec-item-info">` +
+            `<div class="rec-item-name">${esc(v.name)}</div>` +
+            `<div class="rec-item-meta">${fmtDate(v.modified)} &middot; ${v.size_mb} MB</div>` +
+          `</div>` +
+          `<div class="rec-item-actions">` +
+            `<button class="rec-btn rec-btn-play">▶ Play</button>` +
+            `<button class="rec-btn rec-btn-dl">↓ Save</button>` +
+          `</div>`;
+        row.querySelector(".rec-btn-play").onclick = e => {
+          e.stopPropagation(); playRec(v.name, row);
+        };
+        row.querySelector(".rec-btn-dl").onclick = e => {
+          e.stopPropagation(); downloadRec(v.name);
+        };
+        list.appendChild(row);
+      });
+    })
+    .catch(() => {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--red);font-family:var(--mono);font-size:10px;">Failed to load — check Nextcloud credentials</div>';
+    });
+}
+
+function playRec(name, row) {
+  currentRec = name;
+  document.querySelectorAll(".rec-item").forEach(r =>
+    r.classList.toggle("playing", r.dataset.name === name));
+  document.getElementById("recPlaceholder").style.display = "none";
+  const vid = document.getElementById("recVideo");
+  vid.style.display = "block";
+  vid.src = `/video-proxy?file=${encodeURIComponent(name)}`;
+  vid.play().catch(() => {});
+}
+
+function downloadRec(name) {
+  const a = document.createElement("a");
+  a.href = `/video-proxy?file=${encodeURIComponent(name)}&dl=1`;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ── Log ────────────────────────────────────────────────────
+const logBody    = document.getElementById("logBody");
+const logCountEl = document.getElementById("logCount");
+
+function evClass(msg) {
+  const m = msg.toUpperCase();
+  if (m.startsWith("TRIGGER:"))   return "ev-trigger";
+  if (m.startsWith("ENCODE:"))    return "ev-encode";
+  if (m.startsWith("UPLOAD:"))    return "ev-upload";
+  if (m.startsWith("SAVED:"))     return "ev-saved";
+  if (m.startsWith("SELFTEST:"))  return "ev-selftest";
+  if (m.includes("ERROR") || m.includes("FAILED") || m.includes("WARNING"))
+    return "ev-error";
+  return "ev-info";
+}
+
+function parseRms(msg) {
+  const m = msg.match(/RMS[=:]\s*([\d.]+)/i);
+  return m ? parseFloat(m[1]) : null;
+}
+
+function appendLog(raw) {
+  // Strip the [HH:MM:SS] prefix added by journald thread if present
+  const clean = raw.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, "");
+  const ts    = new Date().toLocaleTimeString("sv-SE");
+  const cls   = evClass(clean);
+  const rmsV  = parseRms(clean);
+  if (rmsV !== null) updateRms(rmsV);
+
+  if (clean.startsWith("TRIGGER:")) {
+    isTriggered = true;
+    triggers++;
+    document.getElementById("statTriggers").textContent = triggers;
+    document.getElementById("statStatus").textContent = "TRIGGERED";
+    document.getElementById("statStatus").className = "stat-val red";
+    document.getElementById("brandDot").classList.add("triggered");
+    document.getElementById("triggerHud").style.display = "block";
+    document.getElementById("sysLastTrigger").textContent = ts;
+  }
+  if (clean.startsWith("SAVED:")) {
+    isTriggered = false;
+    saved++;
+    document.getElementById("statSaved").textContent = saved;
+    document.getElementById("statStatus").textContent = "OK";
+    document.getElementById("statStatus").className = "stat-val green";
+    document.getElementById("brandDot").classList.remove("triggered");
+    document.getElementById("triggerHud").style.display = "none";
+    document.getElementById("sysLastUpload").textContent = ts;
+    if (document.getElementById("panel-recordings").classList.contains("active"))
+      setTimeout(loadRecordings, 2000);
+  }
+  if (cls === "ev-error") {
+    errors++;
+    document.getElementById("statErrors").textContent = errors;
+    document.getElementById("statErrors").className = "stat-val red";
+  }
+  if (clean.includes("MONITORING") && isTriggered) {
+    isTriggered = false;
+    document.getElementById("brandDot").classList.remove("triggered");
+    document.getElementById("triggerHud").style.display = "none";
+    document.getElementById("statStatus").textContent = "OK";
+    document.getElementById("statStatus").className = "stat-val green";
+  }
+  if (clean.includes("NEXTCLOUD OK") || clean.includes("Nextcloud OK")) {
+    document.getElementById("sysNextcloud").textContent = "OK";
+    document.getElementById("sysNextcloud").className = "status-val ok";
+  }
+  if (clean.includes("UPLOAD: FAILED") || clean.includes("Upload failed")) {
+    document.getElementById("sysNextcloud").textContent = "Failed";
+    document.getElementById("sysNextcloud").className = "status-val bad";
+  }
+
+  const row = document.createElement("div");
+  row.className = "log-row " + cls;
+  row.innerHTML = `<span class="log-ts">${ts}</span><span class="log-msg">${esc(clean)}</span>`;
+  logBody.appendChild(row);
+  lineCount++;
+  while (logBody.children.length > MAX_LOG)
+    logBody.removeChild(logBody.firstChild);
+  logCountEl.textContent = lineCount + " lines";
+  if (document.getElementById("autoScroll").checked)
+    logBody.scrollTop = logBody.scrollHeight;
+}
+
+function connectLog() {
+  const es = new EventSource("/log");
+  es.onmessage = e => appendLog(JSON.parse(e.data));
+  es.onerror   = () => {
+    document.getElementById("sysRecorder").textContent = "Disconnected";
+    document.getElementById("sysRecorder").className = "status-val bad";
+    setTimeout(connectLog, 3000);
+  };
+  es.onopen = () => {
+    document.getElementById("sysRecorder").textContent = "Running";
+    document.getElementById("sysRecorder").className = "status-val ok";
+  };
+}
+connectLog();
+
+// ── RMS ────────────────────────────────────────────────────
+function updateRms(val) {
+  const pct = Math.min(val / (threshold * 2), 1) * 100;
+  const col  = val >= threshold ? "var(--red)" :
+               val >= threshold * 0.7 ? "var(--amber)" : "var(--green)";
+
+  const rf = document.getElementById("rmsFill");
+  rf.style.width = pct + "%"; rf.style.background = col;
+
+  const mf = document.getElementById("meterFill");
+  mf.style.width = pct + "%";
+  mf.className = "meter-fill" + (val >= threshold ? " over" : val >= threshold * 0.7 ? " warn" : "");
+
+  document.getElementById("rmsNum").textContent = val.toFixed(4);
+}
+
+function setThreshold(t) {
+  threshold = t;
+  document.getElementById("threshNum").textContent = t.toFixed(4);
+}
+
+// ── Config ─────────────────────────────────────────────────
+const cfgFields = ["threshold","pre_trigger_secs","post_trigger_secs",
+                   "video_fps","frame_width","frame_height"];
+
+async function loadConfig() {
+  try {
+    const cfg = await fetch("/config").then(r => r.json());
+    cfgFields.forEach(k => {
+      const el = document.getElementById("cfg_" + k);
+      if (el && cfg[k] !== undefined) el.value = cfg[k];
+    });
+    if (cfg.threshold) setThreshold(parseFloat(cfg.threshold));
+  } catch(e) {}
+}
+
+async function saveSettings() {
+  const data = {};
+  cfgFields.forEach(k => {
+    const el = document.getElementById("cfg_" + k);
+    if (!el) return;
+    // Always use dot as decimal separator regardless of browser locale
+    const raw = el.value.replace(",", ".");
+    data[k] = raw;
+  });
+
+  const toast = document.getElementById("settingsToast");
+  toast.className = "toast";
+  try {
+    const resp = await fetch("/config", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(data),
+    }).then(r => r.json());
+    toast.className = resp.ok ? "toast ok" : "toast err";
+    toast.textContent = resp.message;
+    if (resp.ok && data.threshold)
+      setThreshold(parseFloat(data.threshold.replace(",", ".")));
+  } catch(e) {
+    toast.className = "toast err";
+    toast.textContent = "Request failed: " + e.message;
+  }
+}
+
+async function restartRecorder() {
+  const toast = document.getElementById("settingsToast");
+  toast.className = "toast ok";
+  toast.textContent = "Sending restart…";
+  try {
+    const resp = await fetch("/restart", {method:"POST"}).then(r => r.json());
+    toast.className = resp.ok ? "toast ok" : "toast err";
+    toast.textContent = resp.message;
+  } catch(e) {
+    toast.className = "toast err";
+    toast.textContent = "Restart failed. Run: sudo systemctl restart sound-recorder";
+  }
+}
+
+// ── Settings password gate ─────────────────────────────────
+async function unlockSettings() {
+  const pw = document.getElementById("gatePassword").value;
+  try {
+    const resp = await fetch("/auth", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({password: pw}),
+    }).then(r => r.json());
+
+    if (resp.ok) {
+      document.getElementById("settingsGate").style.display = "none";
+      document.getElementById("settingsBody").classList.add("unlocked");
+      document.getElementById("gateError").classList.remove("show");
+      document.getElementById("gatePassword").value = "";
+      loadConfig();
+    } else {
+      document.getElementById("gateError").classList.add("show");
+      document.getElementById("gatePassword").value = "";
+      document.getElementById("gatePassword").focus();
+    }
+  } catch(e) {
+    document.getElementById("gateError").textContent = "Server unreachable";
+    document.getElementById("gateError").classList.add("show");
+  }
+}
+
+function lockSettings() {
+  document.getElementById("settingsGate").style.display = "flex";
+  document.getElementById("settingsBody").classList.remove("unlocked");
+  document.getElementById("settingsToast").className = "toast";
+}
+
+// ── Manual trigger ─────────────────────────────────────────
+async function manualTrigger() {
+  const btn = document.getElementById("manualTriggerBtn");
+  const orig = btn.textContent;
+  btn.textContent = "⏺ Triggering…";
+  btn.style.opacity = "0.6";
+  btn.disabled = true;
+  try {
+    const resp = await fetch("/trigger", {method: "POST"}).then(r => r.json());
+    btn.textContent = resp.ok ? "⏺ Triggered!" : "⏺ Failed";
+    btn.style.background = resp.ok ? "var(--green-dim)" : "var(--red-dim)";
+    btn.style.borderColor = resp.ok ? "rgba(0,230,118,.5)" : "rgba(255,61,61,.5)";
+    btn.style.color = resp.ok ? "var(--green)" : "var(--red)";
+  } catch(e) {
+    btn.textContent = "⏺ Error";
+  }
+  // Reset after 3 seconds
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.style.opacity = "1";
+    btn.style.background = "var(--red-dim)";
+    btn.style.borderColor = "rgba(255,61,61,.5)";
+    btn.style.color = "var(--red)";
+    btn.disabled = false;
+  }, 3000);
+}
+function esc(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function fmtBytes(b) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB";
+  if (b >= 1048576)    return (b / 1048576).toFixed(0)    + " MB";
+  return (b / 1024).toFixed(0) + " KB";
+}
+
+function updateSysBar(barId, pct) {
+  const el = document.getElementById(barId);
+  el.style.width = pct + "%";
+  el.className = "sysinfo-bar-fill" +
+    (pct >= 90 ? " crit" : pct >= 70 ? " warn" : "");
+}
+
+async function loadSysinfo() {
+  try {
+    const d = await fetch("/sysinfo").then(r => r.json());
+    if (d.error) return;
+
+    document.getElementById("siMemVals").textContent =
+      `${fmtBytes(d.mem_used)} / ${fmtBytes(d.mem_total)}  (${fmtBytes(d.mem_available)} free)`;
+    updateSysBar("siMemBar", d.mem_pct);
+
+    if (d.swap_total > 0) {
+      document.getElementById("siSwapVals").textContent =
+        `${fmtBytes(d.swap_used)} / ${fmtBytes(d.swap_total)}  (${fmtBytes(d.swap_free)} free)`;
+      updateSysBar("siSwapBar", Math.round(d.swap_used / d.swap_total * 100));
+    } else {
+      document.getElementById("siSwapVals").textContent = "disabled";
+      updateSysBar("siSwapBar", 0);
+    }
+
+    document.getElementById("siDiskVals").textContent =
+      `${fmtBytes(d.disk_used)} / ${fmtBytes(d.disk_total)}  (${fmtBytes(d.disk_free)} free)`;
+    updateSysBar("siDiskBar", d.disk_pct);
+
+    if (d.cpu_temp !== null) {
+      const tempEl = document.getElementById("siTemp");
+      tempEl.textContent = d.cpu_temp.toFixed(1) + " °C";
+      tempEl.style.color = d.cpu_temp >= 80 ? "var(--red)" :
+                           d.cpu_temp >= 65 ? "var(--amber)" : "var(--green)";
+    }
+  } catch(e) {}
+}
+
+loadSysinfo();
+setInterval(loadSysinfo, 30000);
+</script>
+</body>
+</html>
